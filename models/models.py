@@ -21,6 +21,8 @@ class Recipe(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
     menu_description = Column(String)
+    category = Column(String)
+    subcategory = Column(String)
 
     ingredients = relationship("Ingredient", back_populates="recipe", cascade="all, delete, delete-orphan")
     allergens = relationship("Allergen", back_populates="recipe", cascade="all, delete, delete-orphan")
