@@ -1,9 +1,10 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                            QLabel, QLineEdit, QTextEdit, QComboBox, QFrame,
-                           QGridLayout, QScrollArea, QMessageBox, QCompleter)
+                           QGridLayout,QFormLayout,QListWidget, QScrollArea, QMessageBox, QCompleter)
 from PyQt6.QtCore import Qt, QStringListModel
 from PyQt6.QtGui import QFont
 from models.models import session, Recipe, Ingredient, Allergen, MasterIngredient
+from menu_categories import MENU_CATEGORIES
 
 class RecipeManagementWindow(QWidget):
     def __init__(self, main_window):
@@ -27,12 +28,19 @@ class RecipeManagementWindow(QWidget):
         main_layout = QHBoxLayout(self)  # Changed to horizontal layout
         main_layout.setSpacing(20)
         main_layout.setContentsMargins(20, 20, 20, 20)
+        form_layout = QFormLayout() # 
 
         # Left Panel (30% width) - Recipe List and Controls
         left_panel = QFrame()
         left_panel.setObjectName("left-panel")
         left_layout = QVBoxLayout(left_panel)
         left_layout.setSpacing(10)
+
+        # Allergens List
+        self.allergen_list = QListWidget()
+        self.allergen_list.addItems(self.allergens)
+        self.allergen_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
+        form_layout.addRow("Allergens:", self.allergen_list)
 
         # Search and Recipe List
         search_box = QLineEdit()
@@ -66,7 +74,7 @@ class RecipeManagementWindow(QWidget):
         right_layout = QVBoxLayout(right_panel)
         right_layout.setSpacing(15)
 
-        # Recipe Details Section
+ # Recipe Details Section
         details_layout = QGridLayout()
         details_layout.setSpacing(10)
 
@@ -77,14 +85,31 @@ class RecipeManagementWindow(QWidget):
         self.recipe_name_input.setFixedHeight(36)
         details_layout.addWidget(QLabel("Recipe Name:"), 0, 0)
         details_layout.addWidget(self.recipe_name_input, 0, 1)
+        
+        # Menu Item Category - MOVE THIS SECTION HERE
+        category_layout = QHBoxLayout()
+        
+        # Main category dropdown
+        self.category_combo = QComboBox()
+        self.category_combo.addItem("")  # Empty option
+        self.category_combo.addItems(sorted(MENU_CATEGORIES.keys()))
+        self.category_combo.currentTextChanged.connect(self.update_subcategories)
+        details_layout.addWidget(QLabel("Category:"), 1, 0)
+        details_layout.addWidget(self.category_combo, 1, 1)
+
+        # Subcategory dropdown
+        self.subcategory_combo = QComboBox()
+        self.subcategory_combo.addItem("")  # Empty option
+        details_layout.addWidget(QLabel("Subcategory:"), 2, 0)
+        details_layout.addWidget(self.subcategory_combo, 2, 1)
 
         # Description (smaller by default)
         self.menu_description_input = QTextEdit()
         self.menu_description_input.setPlaceholderText("Enter menu description")
         self.menu_description_input.setObjectName("description-input")
         self.menu_description_input.setFixedHeight(80)  # Smaller default height
-        details_layout.addWidget(QLabel("Description:"), 1, 0)
-        details_layout.addWidget(self.menu_description_input, 1, 1)
+        details_layout.addWidget(QLabel("Description:"), 3, 0)
+        details_layout.addWidget(self.menu_description_input, 3, 1)
 
         right_layout.addLayout(details_layout)
 
@@ -216,6 +241,43 @@ class RecipeManagementWindow(QWidget):
             self.current_recipe = recipe
             self.recipe_name_input.setText(recipe.name)
             self.menu_description_input.setText(recipe.menu_description)
+            
+            # Set categories
+            if recipe.category:
+                index = self.category_combo.findText(recipe.category)
+                if index >= 0:
+                    self.category_combo.setCurrentIndex(index)
+                    self.update_subcategories(recipe.category)
+                    if recipe.subcategory:
+                        subindex = self.subcategory_combo.findText(recipe.subcategory)
+                        if subindex >= 0:
+                            self.subcategory_combo.setCurrentIndex(subindex)
+
+            # Clear existing ingredient rows
+            self.clear_ingredient_rows()
+
+            # Add ingredient rows for each ingredient
+            for ingredient in recipe.ingredients:
+                self.add_ingredient_row()
+                ingredient_input, quantity_input, uom_input = self.ingredient_rows[-1]
+                ingredient_input.setText(ingredient.ingredient)
+                quantity_input.setText(str(ingredient.quantity))
+                uom_input.setText(ingredient.uom)
+
+            # Set allergens
+            for i in range(self.allergen_list.count()):
+                item = self.allergen_list.item(i)
+                item.setSelected(item.text() in [a.allergen for a in recipe.allergens])
+            if self.recipe_list.currentIndex() == 0:  # "-- Select Recipe --"
+                return
+            
+        recipe_name = self.recipe_list.currentText()
+        recipe = session.query(Recipe).filter_by(name=recipe_name).first()
+
+        if recipe:
+            self.current_recipe = recipe
+            self.recipe_name_input.setText(recipe.name)
+            self.menu_description_input.setText(recipe.menu_description)
 
             # Clear existing ingredient rows
             self.clear_ingredient_rows()
@@ -240,6 +302,8 @@ class RecipeManagementWindow(QWidget):
     def save_recipe(self):
         recipe_name = self.recipe_name_input.text()
         menu_description = self.menu_description_input.toPlainText()
+        category = self.category_combo.currentText()        # Added
+        subcategory = self.subcategory_combo.currentText() # Added
 
         if not recipe_name or not self.ingredient_rows:
             QMessageBox.warning(
@@ -255,9 +319,17 @@ class RecipeManagementWindow(QWidget):
                 recipe = self.current_recipe
                 recipe.name = recipe_name
                 recipe.menu_description = menu_description
+                recipe.category = category
+                recipe.subcategory = subcategory
                 recipe.ingredients.clear()
+            
             else:
-                recipe = Recipe(name=recipe_name, menu_description=menu_description)
+                recipe = Recipe(
+                    name=recipe_name, 
+                    menu_description=menu_description,
+                    category=category,
+                    subcategory=subcategory
+                )        
 
             # Add ingredients
             for row in self.ingredient_rows:
@@ -283,6 +355,10 @@ class RecipeManagementWindow(QWidget):
                             QMessageBox.StandardButton.Ok
                         )
                         return
+
+                for item in self.allergen_list.selectedItems():  # Added back allergens
+                    allergen = Allergen(allergen=item.text())
+                    recipe.allergens.append(allergen)
 
             session.add(recipe)
             session.commit()
@@ -384,6 +460,13 @@ class RecipeManagementWindow(QWidget):
             if item.widget():
                 item.widget().deleteLater()
         self.ingredient_rows = []
+
+    def update_subcategories(self, category):
+        self.subcategory_combo.clear()
+        self.subcategory_combo.addItem("")  # Empty option
+        if category in MENU_CATEGORIES and MENU_CATEGORIES[category]:
+            self.subcategory_combo.addItems(MENU_CATEGORIES[category])
+        self.subcategory_combo.setEnabled(bool(MENU_CATEGORIES.get(category, [])))
 
     def back_to_main(self):
         self.close()
