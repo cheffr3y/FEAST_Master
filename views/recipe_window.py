@@ -1,6 +1,8 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                            QLabel, QLineEdit, QTextEdit, QComboBox, QFrame,
-                           QGridLayout,QFormLayout,QListWidget, QScrollArea, QMessageBox, QCompleter)
+                           QGridLayout,QFormLayout,QListWidget, QScrollArea, QMessageBox, QCompleter,
+                           QTreeWidget, QTreeWidgetItem)
+
 from PyQt6.QtCore import Qt, QStringListModel
 from PyQt6.QtGui import QFont
 from models.models import session, Recipe, Ingredient, Allergen, MasterIngredient
@@ -28,7 +30,7 @@ class RecipeManagementWindow(QWidget):
         main_layout = QHBoxLayout(self)  # Changed to horizontal layout
         main_layout.setSpacing(20)
         main_layout.setContentsMargins(20, 20, 20, 20)
-        form_layout = QFormLayout() # 
+        form_layout = QFormLayout()
 
         # Left Panel (30% width) - Recipe List and Controls
         left_panel = QFrame()
@@ -42,14 +44,19 @@ class RecipeManagementWindow(QWidget):
         self.allergen_list.setSelectionMode(QListWidget.SelectionMode.MultiSelection)
         form_layout.addRow("Allergens:", self.allergen_list)
 
-        # Search and Recipe List
+        # Search and Recipe Tree (replacing old recipe list)
         search_box = QLineEdit()
-        search_box.setPlaceholderText("🔍 Search recipes...")
+        search_box.setPlaceholderText("🔍 Search menu items...")
         search_box.setObjectName("search-box")
         left_layout.addWidget(search_box)
 
-        self.recipe_list.setFixedHeight(32)
-        left_layout.addWidget(self.recipe_list)
+        # New Tree Widget for recipes
+        self.recipe_tree = QTreeWidget()
+        self.recipe_tree.setHeaderLabels(["Menu Items"])
+        self.recipe_tree.setObjectName("recipe-tree")
+        self.recipe_tree.setMinimumHeight(300)
+        self.recipe_tree.itemClicked.connect(self.on_recipe_selected)
+        left_layout.addWidget(self.recipe_tree)
 
         # Action Buttons
         new_recipe_btn = QPushButton("New Recipe")
@@ -74,7 +81,7 @@ class RecipeManagementWindow(QWidget):
         right_layout = QVBoxLayout(right_panel)
         right_layout.setSpacing(15)
 
- # Recipe Details Section
+        # Recipe Details Section
         details_layout = QGridLayout()
         details_layout.setSpacing(10)
 
@@ -86,7 +93,7 @@ class RecipeManagementWindow(QWidget):
         details_layout.addWidget(QLabel("Recipe Name:"), 0, 0)
         details_layout.addWidget(self.recipe_name_input, 0, 1)
         
-        # Menu Item Category - MOVE THIS SECTION HERE
+        # Menu Item Category
         category_layout = QHBoxLayout()
         
         # Main category dropdown
@@ -155,6 +162,58 @@ class RecipeManagementWindow(QWidget):
         back_btn.clicked.connect(self.back_to_main)
         save_btn.clicked.connect(self.save_recipe)
 
+    def load_recipe_names(self):
+            try:
+                self.recipe_tree.clear()
+                
+                # Create category items
+                category_items = {}
+                for category in sorted(MENU_CATEGORIES.keys()):
+                    category_item = QTreeWidgetItem([category])
+                    self.recipe_tree.addTopLevelItem(category_item)
+                    category_items[category] = category_item
+                    
+                    # Add subcategories if they exist
+                    if MENU_CATEGORIES[category]:
+                        for subcategory in MENU_CATEGORIES[category]:
+                            subcat_item = QTreeWidgetItem([subcategory])
+                            category_item.addChild(subcat_item)
+                            # Store with combined key for subcategories
+                            category_items[f"{category}|{subcategory}"] = subcat_item
+
+                # Add recipes to appropriate categories
+                recipes = session.query(Recipe).order_by(Recipe.name).all()
+                for recipe in recipes:
+                    recipe_item = QTreeWidgetItem([recipe.name])
+                    recipe_item.setData(0, Qt.ItemDataRole.UserRole, recipe.id)
+                    
+                    if recipe.category and recipe.subcategory:
+                        # Add to subcategory
+                        key = f"{recipe.category}|{recipe.subcategory}"
+                        if key in category_items:
+                            category_items[key].addChild(recipe_item)
+                    elif recipe.category:
+                        # Add to main category
+                        if recipe.category in category_items:
+                            category_items[recipe.category].addChild(recipe_item)
+                    else:
+                        # Add to root if no category
+                        self.recipe_tree.addTopLevelItem(recipe_item)
+
+                # Expand all categories
+                self.recipe_tree.expandAll()
+                
+            except Exception as e:
+                QMessageBox.warning(self, "Error", f"Failed to load recipes: {str(e)}")
+
+    def on_recipe_selected(self, item):
+        # Only load recipe if it's a leaf node (actual recipe, not a category)
+        if item.childCount() == 0:
+            recipe_name = item.text(0)
+            recipe = session.query(Recipe).filter_by(name=recipe_name).first()
+            if recipe:
+                self.edit_recipe()
+
     def add_ingredient_row(self):
         row_widget = QFrame()
         row_widget.setObjectName("ingredient-row")
@@ -222,19 +281,55 @@ class RecipeManagementWindow(QWidget):
 
     def load_recipe_names(self):
         try:
-            self.recipes = session.query(Recipe).all()
-            self.recipe_list.clear()
-            self.recipe_list.addItem("-- Select Recipe --")
-            for recipe in self.recipes:
-                self.recipe_list.addItem(recipe.name)
+            self.recipe_tree.clear()
+            
+            # Create category items
+            category_items = {}
+            for category in sorted(MENU_CATEGORIES.keys()):
+                category_item = QTreeWidgetItem([category])
+                self.recipe_tree.addTopLevelItem(category_item)
+                category_items[category] = category_item
+                
+                # Add subcategories if they exist
+                if MENU_CATEGORIES[category]:
+                    for subcategory in MENU_CATEGORIES[category]:
+                        subcat_item = QTreeWidgetItem([subcategory])
+                        category_item.addChild(subcat_item)
+                        # Store with combined key for subcategories
+                        category_items[f"{category}|{subcategory}"] = subcat_item
+
+            # Add recipes to appropriate categories
+            recipes = session.query(Recipe).order_by(Recipe.name).all()
+            for recipe in recipes:
+                recipe_item = QTreeWidgetItem([recipe.name])
+                recipe_item.setData(0, Qt.ItemDataRole.UserRole, recipe.id)
+                
+                if recipe.category and recipe.subcategory:
+                    # Add to subcategory
+                    key = f"{recipe.category}|{recipe.subcategory}"
+                    if key in category_items:
+                        category_items[key].addChild(recipe_item)
+                elif recipe.category:
+                    # Add to main category
+                    if recipe.category in category_items:
+                        category_items[recipe.category].addChild(recipe_item)
+                else:
+                    # Add to root if no category
+                    self.recipe_tree.addTopLevelItem(recipe_item)
+
+            # Expand all categories
+            self.recipe_tree.expandAll()
+            
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to load recipes: {str(e)}")
 
     def edit_recipe(self):
-        if self.recipe_list.currentIndex() == 0:  # "-- Select Recipe --"
+    # Get the selected item from the tree
+        selected_items = self.recipe_tree.selectedItems()
+        if not selected_items or selected_items[0].childCount() > 0:  # No selection or is a category
             return
             
-        recipe_name = self.recipe_list.currentText()
+        recipe_name = selected_items[0].text(0)
         recipe = session.query(Recipe).filter_by(name=recipe_name).first()
 
         if recipe:
@@ -268,28 +363,7 @@ class RecipeManagementWindow(QWidget):
             for i in range(self.allergen_list.count()):
                 item = self.allergen_list.item(i)
                 item.setSelected(item.text() in [a.allergen for a in recipe.allergens])
-            if self.recipe_list.currentIndex() == 0:  # "-- Select Recipe --"
-                return
-            
-        recipe_name = self.recipe_list.currentText()
-        recipe = session.query(Recipe).filter_by(name=recipe_name).first()
-
-        if recipe:
-            self.current_recipe = recipe
-            self.recipe_name_input.setText(recipe.name)
-            self.menu_description_input.setText(recipe.menu_description)
-
-            # Clear existing ingredient rows
-            self.clear_ingredient_rows()
-
-            # Add ingredient rows for each ingredient
-            for ingredient in recipe.ingredients:
-                self.add_ingredient_row()
-                ingredient_input, quantity_input, uom_input = self.ingredient_rows[-1]
-                ingredient_input.setText(ingredient.ingredient)
-                quantity_input.setText(str(ingredient.quantity))
-                uom_input.setText(ingredient.uom)
-
+    
     def update_ingredient_completer(self):
         master_ingredients = session.query(MasterIngredient.name).all()
         ingredient_list = [item[0] for item in master_ingredients]
@@ -576,5 +650,25 @@ class RecipeManagementWindow(QWidget):
             QLabel {
                 color: #ffffff;
                 background: transparent;
+            }
+            #recipe-tree {
+                background-color: #2d2d2d;
+                border: 1px solid #3d3d3d;
+                border-radius: 5px;
+                padding: 5px;
+                color: white;
+            }
+            
+            #recipe-tree::item {
+                padding: 5px;
+                border-radius: 3px;
+            }
+            
+            #recipe-tree::item:hover {
+                background-color: #3d3d3d;
+            }
+            
+            #recipe-tree::item:selected {
+                background-color: #4a90e2;
             }
         """)
