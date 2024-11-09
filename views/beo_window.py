@@ -1,13 +1,15 @@
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                            QLabel, QLineEdit, QTextEdit, QComboBox, QFrame,
-                           QGridLayout, QScrollArea, QMessageBox, QDateEdit)
+                           QGridLayout, QScrollArea, QMessageBox, QDateEdit,
+                           QTreeWidget, QTreeWidgetItem)
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QFont
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib import colors
 from models.models import session, Recipe, Ingredient, Allergen
+from menu_categories import MENU_CATEGORIES
 from datetime import datetime
 from utils.unit_converter import convert_units
 
@@ -17,10 +19,7 @@ class BEOManagementWindow(QWidget):
         self.main_window = main_window
         self.setWindowTitle("FEAST MASTER - BEO Management")
         self.setMinimumSize(1200, 800)
-        self.recipe_selections = []
-        
-        # Load recipes early for access throughout the class
-        self.recipes = session.query(Recipe).all()
+        self.menu_item_selections = []
         
         self.setup_ui()
         self.apply_styles()
@@ -73,8 +72,55 @@ class BEOManagementWindow(QWidget):
         details_layout.addWidget(self.special_requirements_input, 3, 1)
 
         left_layout.addWidget(event_details)
+        # Right Panel - Menu Items (60% width)
+        right_panel = QFrame()
+        right_panel.setObjectName("right-panel")
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setSpacing(15)
+
+        # Search Box
+        search_box = QLineEdit()
+        search_box.setPlaceholderText("🔍 Search menu items...")
+        search_box.setObjectName("search-box")
+        right_layout.addWidget(search_box)
+
+        # Menu Items Tree
+        self.menu_tree = QTreeWidget()
+        self.menu_tree.setHeaderLabels(["Menu Items"])
+        self.menu_tree.setObjectName("menu-tree")
+        self.menu_tree.setMinimumHeight(300)
+        right_layout.addWidget(self.menu_tree)
+
+        # Selected Items Section
+        selected_items_frame = QFrame()
+        selected_items_frame.setObjectName("selected-items-frame")
+        selected_layout = QVBoxLayout(selected_items_frame)
+
+        # Selected Items Header
+        selected_header = QHBoxLayout()
+        selected_header.addWidget(QLabel("Selected Items"))
+        add_item_btn = QPushButton("+ Add Selected Item")
+        add_item_btn.setObjectName("button-success")
+        add_item_btn.clicked.connect(self.add_menu_item)
+        selected_header.addWidget(add_item_btn)
+        selected_layout.addLayout(selected_header)
+
+        # Selected Items List
+        self.selected_items_scroll = QScrollArea()
+        self.selected_items_scroll.setWidgetResizable(True)
+        self.selected_items_scroll.setObjectName("selected-items-scroll")
+        
+        self.selected_items_container = QWidget()
+        self.selected_items_layout = QVBoxLayout(self.selected_items_container)
+        self.selected_items_layout.setSpacing(8)
+        self.selected_items_scroll.setWidget(self.selected_items_container)
+        
+        selected_layout.addWidget(self.selected_items_scroll)
+        right_layout.addWidget(selected_items_frame)
 
         # Action Buttons
+        button_layout = QHBoxLayout()
+        
         back_btn = QPushButton("Back to Main")
         back_btn.setObjectName("button-secondary")
         generate_btn = QPushButton("📄 Generate Report")
@@ -82,67 +128,168 @@ class BEOManagementWindow(QWidget):
         
         for btn in [back_btn, generate_btn]:
             btn.setFixedHeight(42)
-            left_layout.addWidget(btn)
+            button_layout.addWidget(btn)
 
-        left_layout.addStretch()
-        main_layout.addWidget(left_panel, 40)  # 40% width
+        # Add panels to main layout
+        main_layout.addWidget(left_panel, 40)   # 40% width
+        main_layout.addWidget(right_panel, 60)  # 60% width
+
+        # Add button layout to main layout
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        button_layout.addWidget(back_btn)
+        button_layout.addWidget(generate_btn)
+        left_layout.addLayout(button_layout)
+
+        # Connect signals
+        back_btn.clicked.connect(self.back_to_main)
+        generate_btn.clicked.connect(self.generate_reports)
+        search_box.textChanged.connect(self.filter_menu_items)
+        
+        # Load menu items into tree
+        self.load_menu_items()
         # Right Panel - Menu Items (60% width)
         right_panel = QFrame()
         right_panel.setObjectName("right-panel")
         right_layout = QVBoxLayout(right_panel)
         right_layout.setSpacing(15)
 
-        # Menu Items Header
-        menu_header = QHBoxLayout()
-        menu_header.addWidget(QLabel("Menu Items"))
-        add_menu_btn = QPushButton("+ Add Menu Item")
-        add_menu_btn.setObjectName("button-success")
-        add_menu_btn.clicked.connect(self.add_menu_item_row)
-        menu_header.addWidget(add_menu_btn)
-        right_layout.addLayout(menu_header)
+        # Search Box
+        search_box = QLineEdit()
+        search_box.setPlaceholderText("🔍 Search menu items...")
+        search_box.setObjectName("search-box")
+        right_layout.addWidget(search_box)
 
-        # Menu Items Scroll Area
-        self.menu_scroll = QScrollArea()
-        self.menu_scroll.setWidgetResizable(True)
-        self.menu_scroll.setObjectName("menu-scroll")
+        # Menu Items Tree
+        self.menu_tree = QTreeWidget()
+        self.menu_tree.setHeaderLabels(["Menu Items"])
+        self.menu_tree.setObjectName("menu-tree")
+        self.menu_tree.setMinimumHeight(300)
+        right_layout.addWidget(self.menu_tree)
+
+        # Selected Items Section
+        selected_items_frame = QFrame()
+        selected_items_frame.setObjectName("selected-items-frame")
+        selected_layout = QVBoxLayout(selected_items_frame)
+
+        # Selected Items Header
+        selected_header = QHBoxLayout()
+        selected_header.addWidget(QLabel("Selected Items"))
+        add_item_btn = QPushButton("+ Add Selected Item")
+        add_item_btn.setObjectName("button-success")
+        add_item_btn.clicked.connect(self.add_menu_item)
+        selected_header.addWidget(add_item_btn)
+        selected_layout.addLayout(selected_header)
+
+        # Selected Items List
+        self.selected_items_scroll = QScrollArea()
+        self.selected_items_scroll.setWidgetResizable(True)
+        self.selected_items_scroll.setObjectName("selected-items-scroll")
         
-        self.menu_container = QWidget()
-        self.menu_items_layout = QVBoxLayout(self.menu_container)
-        self.menu_items_layout.setSpacing(8)
-        self.menu_scroll.setWidget(self.menu_container)
+        self.selected_items_container = QWidget()
+        self.selected_items_layout = QVBoxLayout(self.selected_items_container)
+        self.selected_items_layout.setSpacing(8)
+        self.selected_items_scroll.setWidget(self.selected_items_container)
         
-        right_layout.addWidget(self.menu_scroll)
+        selected_layout.addWidget(self.selected_items_scroll)
+        right_layout.addWidget(selected_items_frame)
+
+        # Action Buttons
+        button_layout = QHBoxLayout()
         
-        # Add first menu item row
-        self.add_menu_item_row()
+        back_btn = QPushButton("Back to Main")
+        back_btn.setObjectName("button-secondary")
+        generate_btn = QPushButton("📄 Generate Report")
+        generate_btn.setObjectName("button-primary")
         
+        for btn in [back_btn, generate_btn]:
+            btn.setFixedHeight(42)
+            button_layout.addWidget(btn)
+
+        # Add panels to main layout
+        main_layout.addWidget(left_panel, 40)   # 40% width
         main_layout.addWidget(right_panel, 60)  # 60% width
+
+        # Add button layout to main layout
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        button_layout.addWidget(back_btn)
+        button_layout.addWidget(generate_btn)
+        left_layout.addLayout(button_layout)
 
         # Connect signals
         back_btn.clicked.connect(self.back_to_main)
         generate_btn.clicked.connect(self.generate_reports)
+        search_box.textChanged.connect(self.filter_menu_items)
+        
+        # Load menu items into tree
+        self.load_menu_items()
 
-    def add_menu_item_row(self):
+        def load_menu_items(self):
+            try:
+                self.menu_tree.clear()
+                
+                # Create category items
+                category_items = {}
+                for category in sorted(MENU_CATEGORIES.keys()):
+                    category_item = QTreeWidgetItem([category])
+                    self.menu_tree.addTopLevelItem(category_item)
+                    category_items[category] = category_item
+                    
+                    # Add subcategories if they exist
+                    if MENU_CATEGORIES[category]:
+                        for subcategory in MENU_CATEGORIES[category]:
+                            subcat_item = QTreeWidgetItem([subcategory])
+                            category_item.addChild(subcat_item)
+                            category_items[f"{category}|{subcategory}"] = subcat_item
+
+                # Add menu items to appropriate categories
+                recipes = session.query(Recipe).order_by(Recipe.name).all()
+                for recipe in recipes:
+                    recipe_item = QTreeWidgetItem([recipe.name])
+                    recipe_item.setData(0, Qt.ItemDataRole.UserRole, recipe.id)
+                    
+                    if recipe.category and recipe.subcategory:
+                        # Add to subcategory
+                        key = f"{recipe.category}|{recipe.subcategory}"
+                        if key in category_items:
+                            category_items[key].addChild(recipe_item)
+                    elif recipe.category:
+                        # Add to main category
+                        if recipe.category in category_items:
+                            category_items[recipe.category].addChild(recipe_item)
+                    else:
+                        # Add to root if no category
+                        self.menu_tree.addTopLevelItem(recipe_item)
+
+                # Expand all categories
+                self.menu_tree.expandAll()
+                
+            except Exception as e:
+                QMessageBox.warning(self, "Error", f"Failed to load menu items: {str(e)}")
+
+    def add_menu_item(self):
+        selected_items = self.menu_tree.selectedItems()
+        if not selected_items or selected_items[0].childCount() > 0:  # No selection or is a category
+            return
+
+        # Create new row for selected item
         row_widget = QFrame()
         row_widget.setObjectName("menu-item-row")
         row_layout = QHBoxLayout(row_widget)
         row_layout.setSpacing(10)
 
-        # Recipe dropdown (70% width)
-        recipe_dropdown = QComboBox()
-        recipe_dropdown.setObjectName("recipe-dropdown")
-        recipe_dropdown.addItem("-- Select Menu Item --")
-        # Sort recipes alphabetically before adding to dropdown
-        sorted_recipes = sorted(self.recipes, key=lambda x: x.name)
-        for recipe in sorted_recipes:
-            recipe_dropdown.addItem(recipe.name)
-        row_layout.addWidget(recipe_dropdown, 70)
+        # Menu item name (60% width)
+        menu_item_name = selected_items[0].text(0)
+        name_label = QLabel(menu_item_name)
+        name_label.setObjectName("menu-item-label")
+        row_layout.addWidget(name_label, 60)
 
-        # Quantity (25% width)
+        # Quantity input (35% width)
         quantity_input = QLineEdit()
         quantity_input.setPlaceholderText("Quantity")
         quantity_input.setObjectName("quantity-input")
-        row_layout.addWidget(quantity_input, 25)
+        row_layout.addWidget(quantity_input, 35)
 
         # Delete button (5% width)
         delete_btn = QPushButton("×")
@@ -150,76 +297,121 @@ class BEOManagementWindow(QWidget):
         delete_btn.clicked.connect(lambda: self.delete_menu_item_row(row_widget))
         row_layout.addWidget(delete_btn, 5)
 
-        self.menu_items_layout.addWidget(row_widget)
-        self.recipe_selections.append((recipe_dropdown, quantity_input))
+        self.selected_items_layout.addWidget(row_widget)
+        self.menu_item_selections.append((menu_item_name, quantity_input))
 
     def delete_menu_item_row(self, row_widget):
         index = None
-        for i in range(self.menu_items_layout.count()):
-            if self.menu_items_layout.itemAt(i).widget() == row_widget:
+        for i in range(self.selected_items_layout.count()):
+            if self.selected_items_layout.itemAt(i).widget() == row_widget:
                 index = i
                 break
         
         if index is not None:
-            self.menu_items_layout.itemAt(index).widget().deleteLater()
-            self.recipe_selections.pop(index)
-    def generate_reports(self):
-        if not self.event_name_input.text() or not self.guest_count_input.text():
-            QMessageBox.warning(
-                self,
-                "Validation Error",
-                "Event name and guest count are required.",
-                QMessageBox.StandardButton.Ok
-            )
-            return
+            self.selected_items_layout.itemAt(index).widget().deleteLater()
+            self.menu_item_selections.pop(index)
 
-        shopping_list = {}
-        allergens = set()
+    def filter_menu_items(self, search_text):
+        def filter_item(item, text):
+            # If the item matches, show it and its parents
+            if text.lower() in item.text(0).lower():
+                item.setHidden(False)
+                parent = item.parent()
+                while parent:
+                    parent.setHidden(False)
+                    parent = parent.parent()
+                return True
+            
+            # If it's a category/has children, check children
+            if item.childCount() > 0:
+                show_item = False
+                for i in range(item.childCount()):
+                    if filter_item(item.child(i), text):
+                        show_item = True
+                item.setHidden(not show_item)
+                return show_item
+            
+            # No match
+            item.setHidden(True)
+            return False
 
-        event_name = self.event_name_input.text()
-        event_date = self.event_date_input.date()
-        # Get formatted date with day name
-        formatted_date = event_date.toString("dddd, MMMM d, yyyy")
-        guest_count = self.guest_count_input.text()
-        special_requirements = self.special_requirements_input.toPlainText()
+        if not search_text:
+            # Show all items if search is empty
+            def show_all(item):
+                item.setHidden(False)
+                for i in range(item.childCount()):
+                    show_all(item.child(i))
+            
+            for i in range(self.menu_tree.topLevelItemCount()):
+                show_all(self.menu_tree.topLevelItem(i))
+        else:
+            # Filter based on search text
+            for i in range(self.menu_tree.topLevelItemCount()):
+                filter_item(self.menu_tree.topLevelItem(i), search_text)
+        
+        def generate_reports(self):
+            if not self.event_name_input.text() or not self.guest_count_input.text():
+                QMessageBox.warning(
+                    self,
+                    "Validation Error",
+                    "Event name and guest count are required.",
+                    QMessageBox.StandardButton.Ok
+                )
+                return
 
-        # Check if any menu items are selected
-        has_menu_items = False
-        for recipe_dropdown, quantity_input in self.recipe_selections:
-            if recipe_dropdown.currentIndex() > 0 and quantity_input.text().strip():
-                has_menu_items = True
-                break
+            shopping_list = {}
+            allergens = set()
 
-        if not has_menu_items:
-            QMessageBox.warning(
-                self,
-                "Validation Error",
-                "Please add at least one menu item with quantity.",
-                QMessageBox.StandardButton.Ok
-            )
-            return
+            event_name = self.event_name_input.text()
+            event_date = self.event_date_input.date()
+            formatted_date = event_date.toString("dddd, MMMM d, yyyy")  # Includes day of week
+            guest_count = self.guest_count_input.text()
+            special_requirements = self.special_requirements_input.toPlainText()
 
-        try:
-            # Loop through each selected recipe
-            for recipe_dropdown, quantity_input in self.recipe_selections:
-                if recipe_dropdown.currentIndex() == 0:  # "-- Select Menu Item --"
-                    continue
+            # Check if any menu items are selected
+            if not self.menu_item_selections:
+                QMessageBox.warning(
+                    self,
+                    "Validation Error",
+                    "Please add at least one menu item.",
+                    QMessageBox.StandardButton.Ok
+                )
+                return
 
-                recipe_name = recipe_dropdown.currentText()
-                try:
-                    ordered_quantity = int(quantity_input.text())
-                except ValueError:
-                    QMessageBox.warning(
-                        self,
-                        "Input Error",
-                        f"Invalid quantity for {recipe_name}",
-                        QMessageBox.StandardButton.Ok
-                    )
-                    return
+            try:
+                # Create organized menu items dictionary by category
+                menu_items_by_category = {}
+                
+                # Loop through each selected menu item
+                for menu_item_name, quantity_input in self.menu_item_selections:
+                    if not quantity_input.text().strip():
+                        continue
 
-                # Find the recipe object
-                recipe = next((r for r in self.recipes if r.name == recipe_name), None)
-                if recipe:
+                    recipe = session.query(Recipe).filter_by(name=menu_item_name).first()
+                    if not recipe:
+                        continue
+
+                    category = recipe.category or "Uncategorized"
+                    if category not in menu_items_by_category:
+                        menu_items_by_category[category] = []
+                    
+                    try:
+                        ordered_quantity = int(quantity_input.text())
+                    except ValueError:
+                        QMessageBox.warning(
+                            self,
+                            "Input Error",
+                            f"Invalid quantity for {menu_item_name}",
+                            QMessageBox.StandardButton.Ok
+                        )
+                        return
+
+                    # Add to category list
+                    menu_items_by_category[category].append({
+                        'recipe': recipe,
+                        'quantity': ordered_quantity
+                    })
+
                     # Update shopping list
                     for ingredient in recipe.ingredients:
                         ingredient_name = ingredient.ingredient
@@ -239,105 +431,83 @@ class BEOManagementWindow(QWidget):
                     # Update allergens
                     allergens.update([a.allergen for a in recipe.allergens])
 
-            self.generate_pdf_report(
-                event_name, 
-                formatted_date,
-                guest_count, 
-                special_requirements, 
-                shopping_list, 
-                allergens
-            )
+                self.generate_pdf_report(
+                    event_name, 
+                    formatted_date,
+                    guest_count, 
+                    special_requirements, 
+                    menu_items_by_category,
+                    shopping_list, 
+                    allergens
+                )
 
-        except Exception as e:
-            QMessageBox.warning(
-                self,
-                "Error",
-                f"Failed to generate report: {str(e)}",
-                QMessageBox.StandardButton.Ok
-            )
+            except Exception as e:
+                QMessageBox.warning(self, "Error", f"Failed to generate report: {str(e)}")
 
     def generate_pdf_report(self, event_name, event_date, guest_count, 
-                          special_requirements, shopping_list, allergens):
+                          special_requirements, menu_items_by_category,
+                          shopping_list, allergens):
         pdf_file = f"BEO_Report_{event_name.replace(' ', '_')}.pdf"
         doc = SimpleDocTemplate(pdf_file, pagesize=A4)
         styles = getSampleStyleSheet()
         story = []
 
-        # Custom style for menu item headers
-        styles.add(ParagraphStyle(
-            name='MenuItemHeader',
-            parent=styles['Normal'],
-            fontSize=14,
-            textColor=colors.HexColor('#4a90e2'),
-            spaceAfter=5
-        ))
-
-        # Title with modern styling
+        # Title
         title = Paragraph(
-            f"""<para fontSize=24 textColor="#4a90e2" alignment=center>
-                <b>Banquet Event Order</b>
-            </para>""", 
+            f"<para fontSize=24 textColor='#4a90e2' alignment=center><b>Banquet Event Order</b></para>", 
             styles['Title']
         )
         story.append(title)
         story.append(Spacer(1, 20))
 
-        # Event Information in a modern box
-        event_info = f"""
-            <para fontSize=12 leading=20>
+        # Event Information
+        event_info = Paragraph(
+            f"""<para fontSize=12 leading=20>
             <b>Event:</b> {event_name}<br/>
             <b>Date:</b> {event_date}<br/>
             <b>Guest Count:</b> {guest_count}<br/>
             <b>Special Requirements:</b><br/>{special_requirements}
-            </para>
-        """
-        story.append(Paragraph(event_info, styles['Normal']))
+            </para>""",
+            styles['Normal']
+        )
+        story.append(event_info)
         story.append(Spacer(1, 30))
 
-        # Menu Items Section - Each item with its own ingredients table
+        # Menu Items Section By Category
         story.append(Paragraph(
             '<para fontSize=18 textColor="#4a90e2"><b>Menu Items</b></para>', 
             styles['Normal']
         ))
         story.append(Spacer(1, 15))
 
-        for recipe_dropdown, quantity_input in self.recipe_selections:
-            if recipe_dropdown.currentIndex() == 0:
-                continue
+        for category, items in menu_items_by_category.items():
+            # Category Header
+            story.append(Paragraph(
+                f'<para fontSize=14><b>{category}</b></para>', 
+                styles['Normal']
+            ))
+            story.append(Spacer(1, 10))
 
-            recipe_name = recipe_dropdown.currentText()
-            quantity = quantity_input.text()
-            recipe = next((r for r in self.recipes if r.name == recipe_name), None)
+            for item in items:
+                recipe = item['recipe']
+                quantity = item['quantity']
 
-            if recipe:
-                # Menu Item Header
+                # Menu Item Name and Description
                 story.append(Paragraph(
-                    f"<b>{recipe_name}</b> (Quantity: {quantity})",
-                    styles['MenuItemHeader']
+                    f"<b>{recipe.name}</b> (Quantity: {quantity})",
+                    styles['Normal']
                 ))
-
-                # Description
                 if recipe.menu_description:
                     story.append(Paragraph(
                         f"<i>{recipe.menu_description}</i>",
                         styles['Normal']
                     ))
-                    story.append(Spacer(1, 5))
+                story.append(Spacer(1, 10))
 
-                # Allergens for this item
-                if recipe.allergens:
-                    item_allergens = ", ".join(sorted(a.allergen for a in recipe.allergens))
-                    story.append(Paragraph(
-                        f"<b>Allergens:</b> {item_allergens}",
-                        styles['Normal']
-                    ))
-                    story.append(Spacer(1, 5))
-
-                # Ingredients table for this item
+                # Ingredient Table for this item
                 ingredient_data = [["Ingredient", "Quantity", "Unit"]]
                 for ingredient in recipe.ingredients:
-                    # Calculate quantity based on ordered amount
-                    calculated_quantity = float(ingredient.quantity) * int(quantity)
+                    calculated_quantity = float(ingredient.quantity) * quantity
                     converted_quantity, converted_uom = convert_units(
                         calculated_quantity, 
                         ingredient.uom
@@ -348,42 +518,33 @@ class BEOManagementWindow(QWidget):
                         converted_uom
                     ])
 
-                # Create and style the table
                 ingredient_table = Table(ingredient_data, colWidths=['50%', '25%', '25%'])
                 ingredient_table.setStyle(TableStyle([
-                    # Header styling
                     ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4a90e2')),
                     ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                    ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                     ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                     ('FONTSIZE', (0, 0), (-1, 0), 11),
                     ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                    
-                    # Body styling
                     ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f5f5f5')),
                     ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
-                    ('ALIGN', (0, 1), (0, -1), 'LEFT'),  # Left align ingredients
-                    ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),  # Right align numbers
+                    ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+                    ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
                     ('FONTSIZE', (0, 1), (-1, -1), 10),
                     ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#dddddd')),
-                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), 
-                     [colors.HexColor('#f9f9f9'), colors.HexColor('#f5f5f5')]),
-                    ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
-                    ('TOPPADDING', (0, 1), (-1, -1), 8),
                 ]))
-
                 story.append(ingredient_table)
-                story.append(Spacer(1, 20))
+                story.append(Spacer(1, 15))
+
+            story.append(Spacer(1, 20))
 
         # Consolidated Shopping List
-        story.append(Spacer(1, 10))
         story.append(Paragraph(
             '<para fontSize=18 textColor="#4a90e2"><b>Consolidated Shopping List</b></para>',
             styles['Normal']
         ))
         story.append(Spacer(1, 15))
 
-        # Create consolidated shopping list table
         shopping_data = [["Ingredient", "Total Quantity", "Unit"]]
         for ingredient, details in sorted(shopping_list.items()):
             shopping_data.append([
@@ -394,28 +555,29 @@ class BEOManagementWindow(QWidget):
 
         shopping_table = Table(shopping_data, colWidths=['50%', '25%', '25%'])
         shopping_table.setStyle(TableStyle([
-            # Header styling
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4a90e2')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 11),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            
-            # Body styling
             ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f5f5f5')),
             ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
             ('ALIGN', (0, 1), (0, -1), 'LEFT'),
             ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
             ('FONTSIZE', (0, 1), (-1, -1), 10),
             ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#dddddd')),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), 
-             [colors.HexColor('#f9f9f9'), colors.HexColor('#f5f5f5')]),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
-            ('TOPPADDING', (0, 1), (-1, -1), 8),
         ]))
-
         story.append(shopping_table)
+
+        # Allergens Section
+        if allergens:
+            story.append(Spacer(1, 30))
+            allergens_text = "Allergens: " + ", ".join(sorted(allergens))
+            story.append(Paragraph(
+                f"<para fontSize=12><b>{allergens_text}</b></para>", 
+                styles['Normal']
+            ))
 
         # Build the PDF
         doc.build(story)
@@ -441,7 +603,7 @@ class BEOManagementWindow(QWidget):
             }
         """)
         msg.exec()
-        
+
     def back_to_main(self):
         self.close()
         self.main_window.show()
@@ -460,7 +622,7 @@ class BEOManagementWindow(QWidget):
                 padding: 20px;
             }
             
-            QLineEdit, QTextEdit, QComboBox, QDateEdit {
+            QLineEdit, QTextEdit, QDateEdit {
                 background-color: #3d3d3d;
                 border: 1px solid #4d4d4d;
                 border-radius: 5px;
@@ -468,8 +630,28 @@ class BEOManagementWindow(QWidget):
                 color: white;
             }
             
-            QLineEdit:focus, QTextEdit:focus, QComboBox:focus, QDateEdit:focus {
+            QLineEdit:focus, QTextEdit:focus, QDateEdit:focus {
                 border: 1px solid #4a90e2;
+            }
+            
+            #menu-tree {
+                background-color: #2d2d2d;
+                border: 1px solid #3d3d3d;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            
+            #menu-tree::item {
+                padding: 5px;
+                border-radius: 3px;
+            }
+            
+            #menu-tree::item:hover {
+                background-color: #3d3d3d;
+            }
+            
+            #menu-tree::item:selected {
+                background-color: #4a90e2;
             }
             
             #menu-item-row {
@@ -477,11 +659,6 @@ class BEOManagementWindow(QWidget):
                 border-radius: 5px;
                 padding: 5px;
                 margin: 2px;
-            }
-            
-            #menu-scroll {
-                border: none;
-                background-color: transparent;
             }
             
             #button-primary {
