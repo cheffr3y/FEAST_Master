@@ -72,6 +72,7 @@ class BEOManagementWindow(QWidget):
         details_layout.addWidget(self.special_requirements_input, 3, 1)
 
         left_layout.addWidget(event_details)
+
         # Right Panel - Menu Items (60% width)
         right_panel = QFrame()
         right_panel.setObjectName("right-panel")
@@ -119,8 +120,6 @@ class BEOManagementWindow(QWidget):
         right_layout.addWidget(selected_items_frame)
 
         # Action Buttons
-        button_layout = QHBoxLayout()
-        
         back_btn = QPushButton("Back to Main")
         back_btn.setObjectName("button-secondary")
         generate_btn = QPushButton("📄 Generate Report")
@@ -128,7 +127,6 @@ class BEOManagementWindow(QWidget):
         
         for btn in [back_btn, generate_btn]:
             btn.setFixedHeight(42)
-            button_layout.addWidget(btn)
 
         # Add panels to main layout
         main_layout.addWidget(left_panel, 40)   # 40% width
@@ -141,132 +139,59 @@ class BEOManagementWindow(QWidget):
         button_layout.addWidget(generate_btn)
         left_layout.addLayout(button_layout)
 
-        # Connect signals
-        back_btn.clicked.connect(self.back_to_main)
-        generate_btn.clicked.connect(self.generate_reports)
-        search_box.textChanged.connect(self.filter_menu_items)
-        
-        # Load menu items into tree
-        self.load_menu_items()
-        # Right Panel - Menu Items (60% width)
-        right_panel = QFrame()
-        right_panel.setObjectName("right-panel")
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setSpacing(15)
-
-        # Search Box
-        search_box = QLineEdit()
-        search_box.setPlaceholderText("🔍 Search menu items...")
-        search_box.setObjectName("search-box")
-        right_layout.addWidget(search_box)
-
-        # Menu Items Tree
-        self.menu_tree = QTreeWidget()
-        self.menu_tree.setHeaderLabels(["Menu Items"])
-        self.menu_tree.setObjectName("menu-tree")
-        self.menu_tree.setMinimumHeight(300)
-        right_layout.addWidget(self.menu_tree)
-
-        # Selected Items Section
-        selected_items_frame = QFrame()
-        selected_items_frame.setObjectName("selected-items-frame")
-        selected_layout = QVBoxLayout(selected_items_frame)
-
-        # Selected Items Header
-        selected_header = QHBoxLayout()
-        selected_header.addWidget(QLabel("Selected Items"))
-        add_item_btn = QPushButton("+ Add Selected Item")
-        add_item_btn.setObjectName("button-success")
-        add_item_btn.clicked.connect(self.add_menu_item)
-        selected_header.addWidget(add_item_btn)
-        selected_layout.addLayout(selected_header)
-
-        # Selected Items List
-        self.selected_items_scroll = QScrollArea()
-        self.selected_items_scroll.setWidgetResizable(True)
-        self.selected_items_scroll.setObjectName("selected-items-scroll")
-        
-        self.selected_items_container = QWidget()
-        self.selected_items_layout = QVBoxLayout(self.selected_items_container)
-        self.selected_items_layout.setSpacing(8)
-        self.selected_items_scroll.setWidget(self.selected_items_container)
-        
-        selected_layout.addWidget(self.selected_items_scroll)
-        right_layout.addWidget(selected_items_frame)
-
-        # Action Buttons
-        button_layout = QHBoxLayout()
-        
-        back_btn = QPushButton("Back to Main")
-        back_btn.setObjectName("button-secondary")
-        generate_btn = QPushButton("📄 Generate Report")
-        generate_btn.setObjectName("button-primary")
-        
-        for btn in [back_btn, generate_btn]:
-            btn.setFixedHeight(42)
-            button_layout.addWidget(btn)
-
-        # Add panels to main layout
-        main_layout.addWidget(left_panel, 40)   # 40% width
-        main_layout.addWidget(right_panel, 60)  # 60% width
-
-        # Add button layout to main layout
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-        button_layout.addWidget(back_btn)
-        button_layout.addWidget(generate_btn)
-        left_layout.addLayout(button_layout)
-
-        # Connect signals
-        back_btn.clicked.connect(self.back_to_main)
-        generate_btn.clicked.connect(self.generate_reports)
-        search_box.textChanged.connect(self.filter_menu_items)
-        
         # Load menu items into tree
         self.load_menu_items()
 
-        def load_menu_items(self):
-            try:
-                self.menu_tree.clear()
-                
-                # Create category items
-                category_items = {}
-                for category in sorted(MENU_CATEGORIES.keys()):
-                    category_item = QTreeWidgetItem([category])
-                    self.menu_tree.addTopLevelItem(category_item)
-                    category_items[category] = category_item
-                    
-                    # Add subcategories if they exist
-                    if MENU_CATEGORIES[category]:
-                        for subcategory in MENU_CATEGORIES[category]:
-                            subcat_item = QTreeWidgetItem([subcategory])
-                            category_item.addChild(subcat_item)
-                            category_items[f"{category}|{subcategory}"] = subcat_item
+        # Connect signals after all methods are defined
+        self.setup_connections(back_btn, generate_btn, search_box)
 
-                # Add menu items to appropriate categories
-                recipes = session.query(Recipe).order_by(Recipe.name).all()
-                for recipe in recipes:
-                    recipe_item = QTreeWidgetItem([recipe.name])
-                    recipe_item.setData(0, Qt.ItemDataRole.UserRole, recipe.id)
-                    
-                    if recipe.category and recipe.subcategory:
-                        # Add to subcategory
-                        key = f"{recipe.category}|{recipe.subcategory}"
-                        if key in category_items:
-                            category_items[key].addChild(recipe_item)
-                    elif recipe.category:
-                        # Add to main category
-                        if recipe.category in category_items:
-                            category_items[recipe.category].addChild(recipe_item)
-                    else:
-                        # Add to root if no category
-                        self.menu_tree.addTopLevelItem(recipe_item)
+    def setup_connections(self, back_btn, generate_btn, search_box):
+        back_btn.clicked.connect(self.back_to_main)
+        generate_btn.clicked.connect(self.generate_reports)
+        search_box.textChanged.connect(self.filter_menu_items)
 
-                # Expand all categories
-                self.menu_tree.expandAll()
+    def load_menu_items(self):
+        try:
+            self.menu_tree.clear()
+            
+            # Create category items
+            category_items = {}
+            for category in sorted(MENU_CATEGORIES.keys()):
+                category_item = QTreeWidgetItem([category])
+                self.menu_tree.addTopLevelItem(category_item)
+                category_items[category] = category_item
                 
-            except Exception as e:
-                QMessageBox.warning(self, "Error", f"Failed to load menu items: {str(e)}")
+                # Add subcategories if they exist
+                if MENU_CATEGORIES[category]:
+                    for subcategory in MENU_CATEGORIES[category]:
+                        subcat_item = QTreeWidgetItem([subcategory])
+                        category_item.addChild(subcat_item)
+                        category_items[f"{category}|{subcategory}"] = subcat_item
+
+            # Add menu items to appropriate categories
+            recipes = session.query(Recipe).order_by(Recipe.name).all()
+            for recipe in recipes:
+                recipe_item = QTreeWidgetItem([recipe.name])
+                recipe_item.setData(0, Qt.ItemDataRole.UserRole, recipe.id)
+                
+                if recipe.category and recipe.subcategory:
+                    # Add to subcategory
+                    key = f"{recipe.category}|{recipe.subcategory}"
+                    if key in category_items:
+                        category_items[key].addChild(recipe_item)
+                elif recipe.category:
+                    # Add to main category
+                    if recipe.category in category_items:
+                        category_items[recipe.category].addChild(recipe_item)
+                else:
+                    # Add to root if no category
+                    self.menu_tree.addTopLevelItem(recipe_item)
+
+            # Expand all categories
+            self.menu_tree.expandAll()
+            
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to load menu items: {str(e)}")
 
     def add_menu_item(self):
         selected_items = self.menu_tree.selectedItems()
@@ -348,101 +273,102 @@ class BEOManagementWindow(QWidget):
             # Filter based on search text
             for i in range(self.menu_tree.topLevelItemCount()):
                 filter_item(self.menu_tree.topLevelItem(i), search_text)
-        
-        def generate_reports(self):
-            if not self.event_name_input.text() or not self.guest_count_input.text():
-                QMessageBox.warning(
-                    self,
-                    "Validation Error",
-                    "Event name and guest count are required.",
-                    QMessageBox.StandardButton.Ok
-                )
-                return
 
-            shopping_list = {}
-            allergens = set()
+    def generate_reports(self):
+        # Now correctly indented to align with other methods
+        if not self.event_name_input.text() or not self.guest_count_input.text():
+            QMessageBox.warning(
+                self,
+                "Validation Error",
+                "Event name and guest count are required.",
+                QMessageBox.StandardButton.Ok
+            )
+            return
 
-            event_name = self.event_name_input.text()
-            event_date = self.event_date_input.date()
-            formatted_date = event_date.toString("dddd, MMMM d, yyyy")  # Includes day of week
-            guest_count = self.guest_count_input.text()
-            special_requirements = self.special_requirements_input.toPlainText()
+        shopping_list = {}
+        allergens = set()
 
-            # Check if any menu items are selected
-            if not self.menu_item_selections:
-                QMessageBox.warning(
-                    self,
-                    "Validation Error",
-                    "Please add at least one menu item.",
-                    QMessageBox.StandardButton.Ok
-                )
-                return
+        event_name = self.event_name_input.text()
+        event_date = self.event_date_input.date()
+        formatted_date = event_date.toString("dddd, MMMM d, yyyy")  # Includes day of week
+        guest_count = self.guest_count_input.text()
+        special_requirements = self.special_requirements_input.toPlainText()
 
-            try:
-                # Create organized menu items dictionary by category
-                menu_items_by_category = {}
+        # Check if any menu items are selected
+        if not self.menu_item_selections:
+            QMessageBox.warning(
+                self,
+                "Validation Error",
+                "Please add at least one menu item.",
+                QMessageBox.StandardButton.Ok
+            )
+            return
+
+        try:
+            # Create organized menu items dictionary by category
+            menu_items_by_category = {}
+            
+            # Loop through each selected menu item
+            for menu_item_name, quantity_input in self.menu_item_selections:
+                if not quantity_input.text().strip():
+                    continue
+
+                recipe = session.query(Recipe).filter_by(name=menu_item_name).first()
+                if not recipe:
+                    continue
+
+                category = recipe.category or "Uncategorized"
+                if category not in menu_items_by_category:
+                    menu_items_by_category[category] = []
                 
-                # Loop through each selected menu item
-                for menu_item_name, quantity_input in self.menu_item_selections:
-                    if not quantity_input.text().strip():
-                        continue
+                try:
+                    ordered_quantity = int(quantity_input.text())
+                except ValueError:
+                    QMessageBox.warning(
+                        self,
+                        "Input Error",
+                        f"Invalid quantity for {menu_item_name}",
+                        QMessageBox.StandardButton.Ok
+                    )
+                    return
 
-                    recipe = session.query(Recipe).filter_by(name=menu_item_name).first()
-                    if not recipe:
-                        continue
+                # Add to category list
+                menu_items_by_category[category].append({
+                    'recipe': recipe,
+                    'quantity': ordered_quantity
+                })
 
-                    category = recipe.category or "Uncategorized"
-                    if category not in menu_items_by_category:
-                        menu_items_by_category[category] = []
-                    
-                    try:
-                        ordered_quantity = int(quantity_input.text())
-                    except ValueError:
-                        QMessageBox.warning(
-                            self,
-                            "Input Error",
-                            f"Invalid quantity for {menu_item_name}",
-                            QMessageBox.StandardButton.Ok
-                        )
-                        return
+                # Update shopping list
+                for ingredient in recipe.ingredients:
+                    ingredient_name = ingredient.ingredient
+                    ingredient_quantity = float(ingredient.quantity) * ordered_quantity
+                    uom = ingredient.uom
 
-                    # Add to category list
-                    menu_items_by_category[category].append({
-                        'recipe': recipe,
-                        'quantity': ordered_quantity
-                    })
+                    # Convert the units if applicable
+                    converted_quantity, converted_uom = convert_units(ingredient_quantity, uom)
+                    if ingredient_name in shopping_list:
+                        shopping_list[ingredient_name]['quantity'] += converted_quantity
+                    else:
+                        shopping_list[ingredient_name] = {
+                            'quantity': converted_quantity, 
+                            'uom': converted_uom
+                        }
 
-                    # Update shopping list
-                    for ingredient in recipe.ingredients:
-                        ingredient_name = ingredient.ingredient
-                        ingredient_quantity = float(ingredient.quantity) * ordered_quantity
-                        uom = ingredient.uom
+                # Update allergens
+                allergens.update([a.allergen for a in recipe.allergens])
 
-                        # Convert the units if applicable
-                        converted_quantity, converted_uom = convert_units(ingredient_quantity, uom)
-                        if ingredient_name in shopping_list:
-                            shopping_list[ingredient_name]['quantity'] += converted_quantity
-                        else:
-                            shopping_list[ingredient_name] = {
-                                'quantity': converted_quantity, 
-                                'uom': converted_uom
-                            }
+            self.generate_pdf_report(
+                event_name, 
+                formatted_date,
+                guest_count, 
+                special_requirements, 
+                menu_items_by_category,
+                shopping_list, 
+                allergens
+            )
 
-                    # Update allergens
-                    allergens.update([a.allergen for a in recipe.allergens])
-
-                self.generate_pdf_report(
-                    event_name, 
-                    formatted_date,
-                    guest_count, 
-                    special_requirements, 
-                    menu_items_by_category,
-                    shopping_list, 
-                    allergens
-                )
-
-            except Exception as e:
-                QMessageBox.warning(self, "Error", f"Failed to generate report: {str(e)}")
+        except Exception as e:
+            QMessageBox.warning(self, "Error", f"Failed to generate report: {str(e)}")
 
     def generate_pdf_report(self, event_name, event_date, guest_count, 
                           special_requirements, menu_items_by_category,
