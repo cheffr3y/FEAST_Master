@@ -4,10 +4,19 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                            QTreeWidget, QTreeWidgetItem)
 from PyQt6.QtCore import Qt, QDate
 from PyQt6.QtGui import QFont
+# from reportlab.lib.pagesizes import A4
+# from reportlab.lib.styles import getSampleStyleSheet
+# from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+# from reportlab.lib import colors
+
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table, 
+                              TableStyle, PageBreak)
 from reportlab.lib import colors
+
 from models.models import session, Recipe, Ingredient, Allergen
 from menu_categories import MENU_CATEGORIES
 from datetime import datetime
@@ -370,67 +379,266 @@ class BEOManagementWindow(QWidget):
         except Exception as e:
             QMessageBox.warning(self, "Error", f"Failed to generate report: {str(e)}")
 
+    # def generate_pdf_report(self, event_name, event_date, guest_count, 
+    #                       special_requirements, menu_items_by_category,
+    #                       shopping_list, allergens):
+    #     pdf_file = f"BEO_Report_{event_name.replace(' ', '_')}.pdf"
+    #     doc = SimpleDocTemplate(pdf_file, pagesize=A4)
+    #     styles = getSampleStyleSheet()
+    #     story = []
+
+    #     # Title
+    #     title = Paragraph(
+    #         f"<para fontSize=24 textColor='#4a90e2' alignment=center><b>Banquet Event Order</b></para>", 
+    #         styles['Title']
+    #     )
+    #     story.append(title)
+    #     story.append(Spacer(1, 20))
+
+    #     # Event Information
+    #     event_info = Paragraph(
+    #         f"""<para fontSize=12 leading=20>
+    #         <b>Event:</b> {event_name}<br/>
+    #         <b>Date:</b> {event_date}<br/>
+    #         <b>Guest Count:</b> {guest_count}<br/>
+    #         <b>Special Requirements:</b><br/>{special_requirements}
+    #         </para>""",
+    #         styles['Normal']
+    #     )
+    #     story.append(event_info)
+    #     story.append(Spacer(1, 30))
+
+    #     # Menu Items Section By Category
+    #     story.append(Paragraph(
+    #         '<para fontSize=18 textColor="#4a90e2"><b>Menu Items</b></para>', 
+    #         styles['Normal']
+    #     ))
+    #     story.append(Spacer(1, 15))
+
+    #     for category, items in menu_items_by_category.items():
+    #         # Category Header
+    #         story.append(Paragraph(
+    #             f'<para fontSize=14><b>{category}</b></para>', 
+    #             styles['Normal']
+    #         ))
+    #         story.append(Spacer(1, 10))
+
+    #         for item in items:
+    #             recipe = item['recipe']
+    #             quantity = item['quantity']
+
+    #             # Menu Item Name and Description
+    #             story.append(Paragraph(
+    #                 f"<b>{recipe.name}</b> (Quantity: {quantity})",
+    #                 styles['Normal']
+    #             ))
+    #             if recipe.menu_description:
+    #                 story.append(Paragraph(
+    #                     f"<i>{recipe.menu_description}</i>",
+    #                     styles['Normal']
+    #                 ))
+    #             story.append(Spacer(1, 10))
+
+    #             # Ingredient Table for this item
+    #             ingredient_data = [["Ingredient", "Quantity", "Unit"]]
+    #             for ingredient in recipe.ingredients:
+    #                 calculated_quantity = float(ingredient.quantity) * quantity
+    #                 converted_quantity, converted_uom = convert_units(
+    #                     calculated_quantity, 
+    #                     ingredient.uom
+    #                 )
+    #                 ingredient_data.append([
+    #                     ingredient.ingredient,
+    #                     f"{converted_quantity:.2f}",
+    #                     converted_uom
+    #                 ])
+
+    #             ingredient_table = Table(ingredient_data, colWidths=['50%', '25%', '25%'])
+    #             ingredient_table.setStyle(TableStyle([
+    #                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4a90e2')),
+    #                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+    #                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+    #                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+    #                 ('FONTSIZE', (0, 0), (-1, 0), 11),
+    #                 ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+    #                 ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f5f5f5')),
+    #                 ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+    #                 ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+    #                 ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
+    #                 ('FONTSIZE', (0, 1), (-1, -1), 10),
+    #                 ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#dddddd')),
+    #             ]))
+    #             story.append(ingredient_table)
+    #             story.append(Spacer(1, 15))
+
+    #         story.append(Spacer(1, 20))
+
+    #     # Consolidated Shopping List
+    #     story.append(Paragraph(
+    #         '<para fontSize=18 textColor="#4a90e2"><b>Consolidated Shopping List</b></para>',
+    #         styles['Normal']
+    #     ))
+    #     story.append(Spacer(1, 15))
+
+    #     shopping_data = [["Ingredient", "Total Quantity", "Unit"]]
+    #     for ingredient, details in sorted(shopping_list.items()):
+    #         shopping_data.append([
+    #             ingredient,
+    #             f"{details['quantity']:.2f}",
+    #             details['uom']
+    #         ])
+
+    #     shopping_table = Table(shopping_data, colWidths=['50%', '25%', '25%'])
+    #     shopping_table.setStyle(TableStyle([
+    #         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4a90e2')),
+    #         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+    #         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+    #         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+    #         ('FONTSIZE', (0, 0), (-1, 0), 11),
+    #         ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+    #         ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f5f5f5')),
+    #         ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+    #         ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+    #         ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
+    #         ('FONTSIZE', (0, 1), (-1, -1), 10),
+    #         ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#dddddd')),
+    #     ]))
+    #     story.append(shopping_table)
+
+    #     # Allergens Section
+    #     if allergens:
+    #         story.append(Spacer(1, 30))
+    #         allergens_text = "Allergens: " + ", ".join(sorted(allergens))
+    #         story.append(Paragraph(
+    #             f"<para fontSize=12><b>{allergens_text}</b></para>", 
+    #             styles['Normal']
+    #         ))
+
+    #     # Build the PDF
+    #     doc.build(story)
+        
+    #     msg = QMessageBox(self)
+    #     msg.setWindowTitle("Success")
+    #     msg.setText(f"BEO Report has been generated: {pdf_file}")
+    #     msg.setIcon(QMessageBox.Icon.Information)
+    #     msg.setStyleSheet("""
+    #         QMessageBox {
+    #             background-color: #2d2d2d;
+    #             color: white;
+    #         }
+    #         QPushButton {
+    #             background-color: #4a90e2;
+    #             color: white;
+    #             border: none;
+    #             padding: 5px 15px;
+    #             border-radius: 3px;
+    #         }
+    #         QPushButton:hover {
+    #             background-color: #357abd;
+    #         }
+    #     """)
+    #     msg.exec()
     def generate_pdf_report(self, event_name, event_date, guest_count, 
-                          special_requirements, menu_items_by_category,
-                          shopping_list, allergens):
+                       special_requirements, menu_items_by_category,
+                       shopping_list, allergens):
         pdf_file = f"BEO_Report_{event_name.replace(' ', '_')}.pdf"
-        doc = SimpleDocTemplate(pdf_file, pagesize=A4)
+        doc = SimpleDocTemplate(
+            pdf_file,
+            pagesize=A4,
+            rightMargin=72,
+            leftMargin=72,
+            topMargin=72,
+            bottomMargin=72
+        )
+        
+        # Create custom styles
         styles = getSampleStyleSheet()
+        styles.add(ParagraphStyle(
+            name='CoverTitle',
+            parent=styles['Title'],
+            fontSize=24,
+            textColor=colors.HexColor('#4a90e2'),
+            spaceAfter=30,
+            alignment=TA_CENTER
+        ))
+        styles.add(ParagraphStyle(
+            name='SectionTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            textColor=colors.HexColor('#4a90e2'),
+            spaceBefore=20,
+            spaceAfter=10
+        ))
+        styles.add(ParagraphStyle(
+            name='SubsectionTitle',
+            parent=styles['Heading2'],
+            fontSize=14,
+            textColor=colors.HexColor('#2d2d2d'),
+            spaceBefore=15,
+            spaceAfter=8
+        ))
+        
         story = []
 
-        # Title
-        title = Paragraph(
-            f"<para fontSize=24 textColor='#4a90e2' alignment=center><b>Banquet Event Order</b></para>", 
-            styles['Title']
-        )
-        story.append(title)
-        story.append(Spacer(1, 20))
-
-        # Event Information
-        event_info = Paragraph(
-            f"""<para fontSize=12 leading=20>
-            <b>Event:</b> {event_name}<br/>
-            <b>Date:</b> {event_date}<br/>
-            <b>Guest Count:</b> {guest_count}<br/>
-            <b>Special Requirements:</b><br/>{special_requirements}
-            </para>""",
-            styles['Normal']
-        )
-        story.append(event_info)
+        # Cover Page
+        story.append(Paragraph("Banquet Event Order", styles['CoverTitle']))
         story.append(Spacer(1, 30))
-
-        # Menu Items Section By Category
-        story.append(Paragraph(
-            '<para fontSize=18 textColor="#4a90e2"><b>Menu Items</b></para>', 
-            styles['Normal']
-        ))
-        story.append(Spacer(1, 15))
-
-        for category, items in menu_items_by_category.items():
-            # Category Header
+        
+        # Event Information Table
+        event_data = [
+            ["Event Name:", event_name],
+            ["Date:", event_date],
+            ["Guest Count:", guest_count],
+            ["Special Requirements:", special_requirements if special_requirements else "None"]
+        ]
+        
+        event_table = Table(event_data, colWidths=[2*inch, 4*inch])
+        event_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f5f5f5')),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#2d2d2d')),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+            ('TOPPADDING', (0, 0), (-1, -1), 12),
+            ('LEFTPADDING', (0, 0), (-1, -1), 15),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 15),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#dddddd')),
+        ]))
+        story.append(event_table)
+        
+        # Allergens Warning (if any)
+        if allergens:
+            story.append(Spacer(1, 20))
+            allergens_text = "⚠️ ALLERGENS PRESENT: " + ", ".join(sorted(allergens))
             story.append(Paragraph(
-                f'<para fontSize=14><b>{category}</b></para>', 
+                f'<para fontSize=12 textColor="red"><b>{allergens_text}</b></para>',
                 styles['Normal']
             ))
-            story.append(Spacer(1, 10))
+        
+        story.append(PageBreak())
 
+        # Menu Items Section
+        story.append(Paragraph("Menu Items", styles['SectionTitle']))
+        
+        for category, items in menu_items_by_category.items():
+            story.append(Paragraph(category, styles['SubsectionTitle']))
+            
             for item in items:
                 recipe = item['recipe']
                 quantity = item['quantity']
-
-                # Menu Item Name and Description
-                story.append(Paragraph(
-                    f"<b>{recipe.name}</b> (Quantity: {quantity})",
-                    styles['Normal']
-                ))
+                
+                # Menu Item Header
+                item_header = f"{recipe.name} (Quantity: {quantity})"
+                story.append(Paragraph(f"<b>{item_header}</b>", styles['Normal']))
+                
                 if recipe.menu_description:
                     story.append(Paragraph(
                         f"<i>{recipe.menu_description}</i>",
                         styles['Normal']
                     ))
-                story.append(Spacer(1, 10))
-
-                # Ingredient Table for this item
+                
+                # Ingredients Table
                 ingredient_data = [["Ingredient", "Quantity", "Unit"]]
                 for ingredient in recipe.ingredients:
                     calculated_quantity = float(ingredient.quantity) * quantity
@@ -443,34 +651,37 @@ class BEOManagementWindow(QWidget):
                         f"{converted_quantity:.2f}",
                         converted_uom
                     ])
-
-                ingredient_table = Table(ingredient_data, colWidths=['50%', '25%', '25%'])
-                ingredient_table.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4a90e2')),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                    ('FONTSIZE', (0, 0), (-1, 0), 11),
-                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                    ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f5f5f5')),
-                    ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
-                    ('ALIGN', (0, 1), (0, -1), 'LEFT'),
-                    ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
-                    ('FONTSIZE', (0, 1), (-1, -1), 10),
-                    ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#dddddd')),
-                ]))
+                
+                ingredient_table = Table(
+                    ingredient_data,
+                    colWidths=[4*inch, 1.5*inch, 1.5*inch],
+                    style=TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4a90e2')),
+                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('FONTSIZE', (0, 0), (-1, 0), 11),
+                        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                        ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f8f9fa')),
+                        ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+                        ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+                        ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
+                        ('FONTSIZE', (0, 1), (-1, -1), 10),
+                        ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#dddddd')),
+                        ('ROWBACKGROUNDS', (0, 1), (-1, -1), 
+                        [colors.HexColor('#ffffff'), colors.HexColor('#f8f9fa')]),
+                    ])
+                )
                 story.append(ingredient_table)
                 story.append(Spacer(1, 15))
-
+            
             story.append(Spacer(1, 20))
 
-        # Consolidated Shopping List
-        story.append(Paragraph(
-            '<para fontSize=18 textColor="#4a90e2"><b>Consolidated Shopping List</b></para>',
-            styles['Normal']
-        ))
-        story.append(Spacer(1, 15))
-
+        # New Page for Shopping List
+        story.append(PageBreak())
+        story.append(Paragraph("Consolidated Shopping List", styles['SectionTitle']))
+        
+        # Group shopping list by category (future enhancement)
         shopping_data = [["Ingredient", "Total Quantity", "Unit"]]
         for ingredient, details in sorted(shopping_list.items()):
             shopping_data.append([
@@ -478,35 +689,41 @@ class BEOManagementWindow(QWidget):
                 f"{details['quantity']:.2f}",
                 details['uom']
             ])
-
-        shopping_table = Table(shopping_data, colWidths=['50%', '25%', '25%'])
-        shopping_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4a90e2')),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 11),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f5f5f5')),
-            ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
-            ('ALIGN', (0, 1), (0, -1), 'LEFT'),
-            ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
-            ('FONTSIZE', (0, 1), (-1, -1), 10),
-            ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#dddddd')),
-        ]))
+        
+        shopping_table = Table(
+            shopping_data,
+            colWidths=[4*inch, 1.5*inch, 1.5*inch],
+            style=TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4a90e2')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 11),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#f8f9fa')),
+                ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+                ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+                ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
+                ('FONTSIZE', (0, 1), (-1, -1), 10),
+                ('GRID', (0, 0), (-1, -1), 1, colors.HexColor('#dddddd')),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), 
+                [colors.HexColor('#ffffff'), colors.HexColor('#f8f9fa')]),
+            ])
+        )
         story.append(shopping_table)
 
-        # Allergens Section
-        if allergens:
-            story.append(Spacer(1, 30))
-            allergens_text = "Allergens: " + ", ".join(sorted(allergens))
-            story.append(Paragraph(
-                f"<para fontSize=12><b>{allergens_text}</b></para>", 
-                styles['Normal']
-            ))
+        # Footer with page numbers
+        def add_page_number(canvas, doc):
+            page_num = canvas.getPageNumber()
+            text = f"Page {page_num}"
+            canvas.saveState()
+            canvas.setFont('Helvetica', 9)
+            canvas.setFillColor(colors.HexColor('#666666'))
+            canvas.drawRightString(doc.pagesize[0] - 72, 72, text)
+            canvas.restoreState()
 
-        # Build the PDF
-        doc.build(story)
+        # Build the PDF with page numbers
+        doc.build(story, onFirstPage=add_page_number, onLaterPages=add_page_number)
         
         msg = QMessageBox(self)
         msg.setWindowTitle("Success")
